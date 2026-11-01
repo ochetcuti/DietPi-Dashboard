@@ -35,8 +35,8 @@ fn get_cookies(parts: &RequestParts) -> HashMap<String, String> {
         .unwrap_or_default();
 
     cookie_header
-        .split("; ")
-        .filter_map(|x| x.split_once('='))
+        .split(';')
+        .filter_map(|x| x.trim().split_once('='))
         .map(|(k, v)| (k.to_string(), v.to_string()))
         .collect()
 }
@@ -240,5 +240,28 @@ impl Deref for ServerRequest {
 impl DerefMut for ServerRequest {
     fn deref_mut(&mut self) -> &mut Self::Target {
         &mut self.parts
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::get_cookies;
+    use hyper::{Request, header};
+
+    #[test]
+    fn parses_cookie_separators_with_and_without_spaces() {
+        for cookie in [
+            "preference=x; token=abc",
+            "preference=x;token=abc",
+            " preference=x ; token=abc ",
+        ] {
+            let (parts, _) = Request::builder()
+                .header(header::COOKIE, cookie)
+                .body(())
+                .unwrap()
+                .into_parts();
+            let cookies = get_cookies(&parts);
+            assert_eq!(cookies.get("token").map(String::as_str), Some("abc"));
+        }
     }
 }
