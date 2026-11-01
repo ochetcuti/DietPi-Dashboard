@@ -28,17 +28,18 @@ pub fn cpu_meters(cpu_data: &CpuResponse, temp_data: &TempResponse) -> Markup {
     let span = calc_grid_span(cpu_data.cpus.len()) + 1;
 
     html! {
-        section .{"span-" (span)} {
-            h2 { "CPU Statistics" }
+        section .metric-card .{"span-" (span)} {
+            h2 { "Processor" }
             @if let Some(temp) = temp_data.temp {
                 p { "CPU Temperature: " (temp) "ºC" }
             }
-            p { "Global CPU: " (cpu_data.global_cpu) "%" }
+            p .metric-primary { (cpu_data.global_cpu) "%" }
+            p .metric-label { "Total CPU usage" }
             .meter-container {
                 .bar.cpu style={"--scale:"(cpu_data.global_cpu / 100.)} {}
             }
             @for (usage, num) in cpu_iter {
-                p { "CPU "(num)": "(usage)"%" }
+                p .metric-row { span { "Core " (num) } strong { (usage) "%" } }
                 .meter-container {
                     .bar.cpu style={"--scale:"(usage / 100.)} {}
                 }
@@ -54,14 +55,14 @@ pub fn cpu_graph(data: &CpuResponse, points: &mut QueryArray) -> Markup {
         .chain(points.iter())
         .take(20);
 
-    graph.add_series(points_iter.clone(), "var(--green-6)", "CPU");
+    graph.add_series(points_iter.clone(), "var(--chart-cpu)", "CPU");
 
     *points = points_iter.collect();
 
     html! {
         section .span-3
         {
-            h2 { "CPU Graph" }
+            h2 { "CPU activity" }
             (graph)
         }
     }
@@ -73,14 +74,14 @@ pub fn temp_graph(data: &TempResponse, points: &mut QueryArray) -> Option<Markup
 
         let points_iter = std::iter::once(temp).chain(points.iter()).take(20);
 
-        graph.add_series(points_iter.clone(), "light-dark(#000, #fff)", "Temperature");
+        graph.add_series(points_iter.clone(), "var(--chart-temp)", "Temperature");
 
         *points = points_iter.collect();
 
         html! {
                 section .span-3
                 {
-                    h2 { "Temperature Graph" }
+                    h2 { "Temperature history" }
                     (graph)
                 }
         }
@@ -97,15 +98,15 @@ pub fn mem_meters(data: &MemResponse) -> Markup {
     let swap_percent = calc_percent(data.swap.used, data.swap.total);
 
     html! {
-        section .span-2 {
-            h2 { "Memory Usage" }
+        section .metric-card .span-2 {
+            h2 { "Memory" }
 
-            p { "RAM Usage: " (pretty_ram_used) " / " (pretty_ram_total) }
+            p .metric-row { span { "RAM" } strong { (pretty_ram_used) " / " (pretty_ram_total) } }
             div .meter-container {
                 div .bar.ram style={"--scale:"(ram_percent / 100.)} {}
             }
 
-            p { "Swap Usage: " (pretty_swap_used) " / " (pretty_swap_total) }
+            p .metric-row { span { "Swap" } strong { (pretty_swap_used) " / " (pretty_swap_total) } }
             div .meter-container {
                 div .bar.swap style={"--scale:"(swap_percent / 100.)} {}
             }
@@ -130,15 +131,15 @@ pub fn mem_graph(
         .chain(swap_points.iter())
         .take(20);
 
-    graph.add_series(ram_points_iter.clone(), "var(--red-6)", "RAM");
-    graph.add_series(swap_points_iter.clone(), "var(--blue-6)", "Swap");
+    graph.add_series(ram_points_iter.clone(), "var(--chart-ram)", "RAM");
+    graph.add_series(swap_points_iter.clone(), "var(--chart-swap)", "Swap");
 
     *ram_points = ram_points_iter.collect();
     *swap_points = swap_points_iter.collect();
 
     html! {
         section .span-3 {
-            h2 { "Memory Graph" }
+            h2 { "Memory activity" }
             (graph)
         }
     }
@@ -148,15 +149,15 @@ pub fn disk_meters(data: &DiskResponse) -> Markup {
     let span = calc_grid_span(data.disks.len());
 
     html! {
-        section .{"span-" (span)} {
-            h2 { "Disk Usage" }
+        section .metric-card .{"span-" (span)} {
+            h2 { "Storage" }
 
             @for disk in &data.disks {
                 @let pretty_disk_used = pretty_bytes(disk.usage.used, Some(2));
                 @let pretty_disk_total = pretty_bytes(disk.usage.total, Some(2));
                 @let disk_percent = calc_percent(disk.usage.used, disk.usage.total);
 
-                p { (disk.name) " (" (disk.mnt_point) "): " (pretty_disk_used) " / " (pretty_disk_total) }
+                p .metric-row { span { (disk.name) " (" (disk.mnt_point) ")" } strong { (pretty_disk_used) " / " (pretty_disk_total) } }
                 .meter-container {
                     .bar.disk style={"--scale:"(disk_percent / 100.)} {}
                 }
@@ -179,15 +180,15 @@ pub fn net_graph(
         .chain(recv_points.iter())
         .take(20);
 
-    graph.add_series(sent_points_iter.clone(), "var(--purple-6)", "Sent");
-    graph.add_series(recv_points_iter.clone(), "var(--pink-6)", "Received");
+    graph.add_series(sent_points_iter.clone(), "var(--chart-sent)", "Sent");
+    graph.add_series(recv_points_iter.clone(), "var(--chart-recv)", "Received");
 
     *sent_points = sent_points_iter.collect();
     *recv_points = recv_points_iter.collect();
 
     html! {
         section .span-3 {
-            h2 { "Network Graph" }
+            h2 { "Network activity" }
             (graph)
         }
     }

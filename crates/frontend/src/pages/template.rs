@@ -49,7 +49,7 @@ fn header(req: &ServerRequest) -> Result<Markup, ServerResponse> {
             }
 
             label {
-                "Backend: "
+                span .node-label { "Connected node" }
                 select
                     onchange="document.cookie = `backend=${this.value}; MaxAge=999999999`; window.location.reload()"
                 {
@@ -106,38 +106,40 @@ fn header(req: &ServerRequest) -> Result<Markup, ServerResponse> {
     })
 }
 
-fn nav() -> Markup {
+fn nav(current: &str) -> Markup {
+    let links = [
+        ("/system", "fa6-solid-gauge", "Overview"),
+        ("/process", "fa6-solid-microchip", "Processes"),
+        ("/software", "fa6-solid-database", "Software"),
+        ("/service", "fa6-solid-list", "Services"),
+        ("/management", "fa6-solid-user", "Management"),
+        ("/terminal", "fa6-solid-terminal", "Terminal"),
+        ("/browser", "fa6-solid-folder", "File browser"),
+    ];
     html! {
-        nav #nav {
-            a href="/system" {
-                (Icon::new("fa6-solid-gauge"))
-                "System"
-            }
-            a href="/process" {
-                (Icon::new("fa6-solid-microchip"))
-                "Processes"
-            }
-            a href="/software" {
-                (Icon::new("fa6-solid-database"))
-                "Software"
-            }
-            a href="/service" {
-                (Icon::new("fa6-solid-list"))
-                "Services"
-            }
-            a href="/management" {
-                (Icon::new("fa6-solid-user"))
-                "Management"
-            }
-            a href="/terminal" {
-                (Icon::new("fa6-solid-terminal"))
-                "Terminal"
-            }
-            a href="/browser" {
-                (Icon::new("fa6-solid-folder"))
-                "File Browser"
+        nav #nav aria-label="Main navigation" {
+            p .nav-caption { "WORKSPACE" }
+            @for (url, icon, label) in links {
+                a href=(url) aria-current=[if current == url.trim_start_matches('/') { Some("page") } else { None }] {
+                    (Icon::new(icon).size(19))
+                    (label)
+                }
             }
         }
+    }
+}
+
+fn page_heading(current: &str) -> (&'static str, &'static str) {
+    match current {
+        "system" => ("System overview", "Live resource usage and activity"),
+        "process" => ("Processes", "Inspect and manage running processes"),
+        "software" => ("Software", "Manage software on this node"),
+        "service" => ("Services", "Review service status and logs"),
+        "management" => ("Management", "Host details and dashboard settings"),
+        "terminal" => ("Terminal", "Command line access to this node"),
+        "browser" => ("File browser", "Browse and manage files on this node"),
+        "login" => ("Welcome back", "Sign in to access your dashboard"),
+        _ => ("Dashboard", "Your DietPi workspace"),
     }
 }
 
@@ -157,6 +159,8 @@ pub fn template(
     content: Markup,
     persistent_data: &str,
 ) -> Result<ServerResponse, ServerResponse> {
+    let current = req.path_segments().next().unwrap_or("");
+    let (heading, description) = page_heading(current);
     let page = if req.is_fixi() {
         content
     } else {
@@ -176,13 +180,16 @@ pub fn template(
                     nm-data="navOpen: window.innerWidth > 700, msgsOpen: false, newMsg: false,"
                     nm-bind="'class.nav-closed': () => !navOpen, 'class.msgs-open': () => msgsOpen"
                 {
-                    h1 { "DietPi Dashboard" }
+                    h1 { span .brand-mark { "D" } span .brand-name { "DietPi" small { "DASHBOARD" } } }
 
                     (header(req)?)
 
-                    (nav())
+                    (nav(current))
 
                     main nm-data=(persistent_data) {
+                        div .page-heading {
+                            div { h2 { (heading) } p { (description) } }
+                        }
                         (content)
                     }
 

@@ -27,11 +27,13 @@
     cursor: pointer;
 
     &[data-action="install"] {
-        background-color: var(--green-6);
+        background-color: #315fbe;
+        color: white;
     }
 
     &[data-action="uninstall"] {
-        background-color: var(--red-6);
+        background-color: #a82f3c;
+        color: white;
     }
 
     &:disabled {

@@ -49,7 +49,7 @@ table#browser-inner tr {
     }
 
     &[aria-current="true"] {
-        background-color: light-dark(var(--dietpi-dark), var(--dietpi-teal-dark));
+        background-color: light-dark(#dce8ff, #334c70);
     }
 }
 
