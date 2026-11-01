@@ -53,3 +53,6 @@
         transform: rotate(1turn)
     }
 }
+
+.tab-container { min-width: 0; overflow-x: auto; }
+.tab-container > .tabs { display: flex; flex-wrap: wrap; gap: .25rem; }

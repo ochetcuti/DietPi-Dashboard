@@ -121,3 +121,10 @@
         color: var(--pink-6);
     }
 }
+.card-grid { grid-template-columns: repeat(auto-fit, minmax(min(100%, 20rem), 1fr)); }
+.legend { flex-wrap: wrap; }
+@media (max-width: 700px) {
+    .card-grid { grid-auto-rows: auto; }
+    .card-grid > section { min-height: 9rem; grid-row: auto; }
+    .card-grid > section:has(.graph-wrapper) { min-height: 17rem; }
+}

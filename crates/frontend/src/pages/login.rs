@@ -16,13 +16,13 @@ pub async fn page(req: ServerRequest) -> Result<ServerResponse, ServerResponse> 
     }
 
     let content = html! {
-        section {
-            h2 { "Login Form" }
+        section .login {
+            h2 { "Sign in" }
 
             form method="POST" {
-                input name="pass" type="password" placeholder="Password" {}
-                br; br;
-                button { "Login" }
+                label for="password" { "Password" }
+                input #password name="pass" type="password" autocomplete="current-password" required {}
+                button { "Sign in" }
             }
         }
     };

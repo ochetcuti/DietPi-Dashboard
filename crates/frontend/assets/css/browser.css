@@ -82,3 +82,12 @@ table#browser-inner tr {
 
     background-color: light-dark(var(--gray-4), var(--gray-8));
 }
+#browser-swap { grid-template-columns: minmax(0, 1fr) auto; }
+#path-display { flex-wrap: wrap; overflow-wrap: anywhere; }
+#browser-inner { min-width: 0; }
+#actions-list { border-radius: 6px; }
+@media (max-width: 700px) {
+    #browser-swap { grid-template-columns: minmax(0, 1fr); grid-template-areas: "path" "actions" "table"; gap: .75rem; }
+    #actions-list { flex-direction: row; flex-wrap: wrap; }
+    table#browser-inner { display: block; overflow-x: auto; }
+}

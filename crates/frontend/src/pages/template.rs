@@ -41,9 +41,11 @@ fn header(req: &ServerRequest) -> Result<Markup, ServerResponse> {
         header {
             button
                 aria-controls="nav"
+                aria-label="Toggle navigation"
                 nm-bind="onclick: () => navOpen = !navOpen, ariaExpanded: () => navOpen"
             {
-                (Icon::new("fa6-solid-bars").size(48))
+                (Icon::new("fa6-solid-bars"))
+                span { "Menu" }
             }
 
             label {
@@ -61,6 +63,7 @@ fn header(req: &ServerRequest) -> Result<Markup, ServerResponse> {
             }
 
             button .msg-btn
+                aria-label="Notifications"
                 aria-controls="msgs"
                 nm-bind="onclick: () => msgsOpen = !msgsOpen, ariaExpanded: () => msgsOpen"
             {
@@ -73,7 +76,7 @@ fn header(req: &ServerRequest) -> Result<Markup, ServerResponse> {
                     name="color-scheme"
                     nm-bind="content: () => isDark ? 'dark' : 'light'"
                 {}
-                button nm-bind="
+                button aria-label="Toggle color theme" nm-bind="
                     onclick: () => {
                         isDark = !isDark;
                         localStorage.setItem('darkMode', isDark);
@@ -170,7 +173,7 @@ pub fn template(
                     link rel="stylesheet" href="/static/main.css";
                 }
                 body
-                    nm-data="navOpen: true, msgsOpen: false, newMsg: false,"
+                    nm-data="navOpen: window.innerWidth > 700, msgsOpen: false, newMsg: false,"
                     nm-bind="'class.nav-closed': () => !navOpen, 'class.msgs-open': () => msgsOpen"
                 {
                     h1 { "DietPi Dashboard" }
