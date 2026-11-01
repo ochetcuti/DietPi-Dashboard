@@ -24,38 +24,53 @@ macro_rules! router {
     }};
 }
 
+fn same_origin_post(headers: &hyper::HeaderMap) -> bool {
+    let fetch_site = headers.get("sec-fetch-site").and_then(|v| v.to_str().ok());
+    if fetch_site == Some("cross-site") {
+        return false;
+    }
+    // Browsers set Fetch Metadata themselves, including behind reverse proxies.
+    if fetch_site == Some("same-origin") {
+        return true;
+    }
+    let Some(origin) = headers.get(header::ORIGIN) else {
+        return true;
+    };
+    let Some(origin) = origin
+        .to_str()
+        .ok()
+        .and_then(|s| s.parse::<hyper::Uri>().ok())
+    else {
+        return false;
+    };
+    let Some(scheme) = origin.scheme_str() else {
+        return false;
+    };
+    let default_port = match scheme {
+        "http" => 80,
+        "https" => 443,
+        _ => return false,
+    };
+    let Some(authority) = origin.authority() else {
+        return false;
+    };
+    let Some(host) = headers
+        .get(header::HOST)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<hyper::http::uri::Authority>().ok())
+    else {
+        return false;
+    };
+    authority.host().eq_ignore_ascii_case(host.host())
+        && authority.port_u16().unwrap_or(default_port) == host.port_u16().unwrap_or(default_port)
+}
+
 pub async fn router(req: ServerRequest) -> Result<BuiltResponse, std::convert::Infallible> {
-    if req.method == Method::POST {
-        let cross_site = req
-            .headers
-            .get("sec-fetch-site")
-            .and_then(|value| value.to_str().ok())
-            == Some("cross-site");
-        let origin_mismatch = req
-            .headers
-            .get(header::ORIGIN)
-            .and_then(|value| value.to_str().ok())
-            .map(|origin| {
-                let origin_authority = origin
-                    .parse::<hyper::Uri>()
-                    .ok()
-                    .and_then(|uri| uri.authority().cloned());
-                let host = req
-                    .headers
-                    .get(header::HOST)
-                    .and_then(|value| value.to_str().ok());
-                origin_authority
-                    .as_ref()
-                    .map(|authority| authority.as_str())
-                    != host
-            })
-            .unwrap_or(false);
-        if cross_site || origin_mismatch {
-            return Ok(ServerResponse::new()
-                .status(StatusCode::FORBIDDEN)
-                .body("Cross-site request rejected")
-                .build());
-        }
+    if req.method == Method::POST && !same_origin_post(&req.headers) {
+        return Ok(ServerResponse::new()
+            .status(StatusCode::FORBIDDEN)
+            .body("Cross-site request rejected")
+            .build());
     }
     if req.method == Method::POST
         && req.uri.path() != "/login"
@@ -120,4 +135,67 @@ pub async fn router(req: ServerRequest) -> Result<BuiltResponse, std::convert::I
     let resp = resp.build();
 
     Ok(resp)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::same_origin_post;
+    use hyper::{HeaderMap, header};
+
+    fn headers(origin: &str, host: &str, fetch_site: Option<&str>) -> HeaderMap {
+        let mut headers = HeaderMap::new();
+        headers.insert(header::ORIGIN, origin.parse().unwrap());
+        headers.insert(header::HOST, host.parse().unwrap());
+        if let Some(value) = fetch_site {
+            headers.insert("sec-fetch-site", value.parse().unwrap());
+        }
+        headers
+    }
+
+    #[test]
+    fn permits_browser_same_origin_behind_proxy() {
+        assert!(same_origin_post(&headers(
+            "https://dashboard.example",
+            "localhost:5252",
+            Some("same-origin")
+        )));
+    }
+
+    #[test]
+    fn normalizes_default_ports_without_fetch_metadata() {
+        assert!(same_origin_post(&headers(
+            "https://dashboard.example",
+            "dashboard.example:443",
+            None
+        )));
+        assert!(same_origin_post(&headers(
+            "http://dashboard.example:80",
+            "DASHBOARD.EXAMPLE",
+            None
+        )));
+        assert!(!same_origin_post(&headers(
+            "https://dashboard.example:8443",
+            "dashboard.example",
+            None
+        )));
+    }
+
+    #[test]
+    fn blocks_cross_site_and_different_origins() {
+        assert!(!same_origin_post(&headers(
+            "https://other.example",
+            "dashboard.example",
+            Some("cross-site")
+        )));
+        assert!(!same_origin_post(&headers(
+            "https://other.example",
+            "dashboard.example",
+            None
+        )));
+        assert!(!same_origin_post(&headers(
+            "null",
+            "dashboard.example",
+            None
+        )));
+    }
 }
