@@ -14,7 +14,11 @@ use tokio::{
     sync::{mpsc, oneshot},
 };
 
-use super::{SharedBackendRegistry, cache::BackendCache};
+use super::{
+    SharedBackendRegistry,
+    cache::BackendCache,
+    history::{self, History, Sample},
+};
 
 #[derive(Debug)]
 pub struct BackendInfo {
@@ -79,13 +83,15 @@ impl BackendConnection {
             self.addr.to_string()
         };
 
+        let handle = BackendHandle::new(tx);
         let conn_info = BackendInfo {
             nickname,
             update: handshake.update,
-            handle: BackendHandle::new(tx),
+            handle: handle.clone(),
         };
 
         self.registry.lock().unwrap().insert(self.addr, conn_info);
+        tokio::spawn(history::sample(handle));
 
         if let Err(err) = self.handle_requests(rx).await {
             error!("Error handling requests for backend {}: {err:#}", self.addr)
@@ -136,6 +142,8 @@ impl BackendConnection {
                                 continue;
                             }
 
+                            let abandoned: Vec<_> = in_progress.iter().filter_map(|(id, tx)| tx.is_closed().then_some(id)).collect();
+                            for id in abandoned { in_progress.remove(id); }
                             // Save response channel so we can send to it when we receive a response
                             let id = in_progress.insert(resp_tx) as u16;
 
@@ -208,11 +216,23 @@ impl BackendConnection {
 #[derive(Debug, Clone)]
 pub struct BackendHandle {
     tx: mpsc::UnboundedSender<BackendRequest>,
+    pub(super) history: History,
 }
 
 impl BackendHandle {
     fn new(tx: mpsc::UnboundedSender<BackendRequest>) -> Self {
-        Self { tx }
+        Self {
+            tx,
+            history: History::default(),
+        }
+    }
+
+    pub fn history(&self) -> Vec<Sample> {
+        self.history.snapshot()
+    }
+
+    pub fn is_closed(&self) -> bool {
+        self.tx.is_closed()
     }
 
     pub async fn send_req(&self, req: RequestFrontendMessage) -> Result<ResponseBackendMessage> {

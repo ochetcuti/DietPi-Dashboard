@@ -11,8 +11,10 @@ use tokio::net::TcpListener;
 
 mod cache;
 mod conn;
+mod history;
 
 pub use conn::BackendHandle;
+pub use history::Sample;
 
 use crate::SharedConfig;
 

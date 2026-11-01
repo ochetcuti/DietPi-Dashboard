@@ -2,7 +2,7 @@ use maud::{Markup, html};
 use pretty_bytes_typed::{pretty_bytes, pretty_bytes_binary};
 use proto::backend::{CpuResponse, DiskResponse, MemResponse, NetworkResponse, TempResponse};
 
-use crate::http::query_array::QueryArray;
+use crate::backend::Sample;
 
 use super::graph::{Axis, SvgGraph};
 
@@ -28,10 +28,10 @@ pub fn cpu_meters(cpu_data: &CpuResponse, temp_data: &TempResponse) -> Markup {
     let span = calc_grid_span(cpu_data.cpus.len()) + 1;
 
     html! {
-        section .metric-card .{"span-" (span)} {
+        section .metric-card .{"span-" (span)} data-panel="cpu-meter" {
             h2 { "Processor" }
             @if let Some(temp) = temp_data.temp {
-                p { "CPU Temperature: " (temp) "ºC" }
+                p { "CPU Temperature: " (temp) "\u{00b0}C" }
             }
             p .metric-primary { (cpu_data.global_cpu) "%" }
             p .metric-label { "Total CPU usage" }
@@ -48,42 +48,41 @@ pub fn cpu_meters(cpu_data: &CpuResponse, temp_data: &TempResponse) -> Markup {
     }
 }
 
-pub fn cpu_graph(data: &CpuResponse, points: &mut QueryArray) -> Markup {
+pub fn cpu_graph(data: &CpuResponse, history: &[Sample]) -> Markup {
     let mut graph = SvgGraph::new(Axis::Percent);
 
-    let points_iter = std::iter::once(data.global_cpu)
-        .chain(points.iter())
-        .take(20);
-
-    graph.add_series(points_iter.clone(), "var(--chart-cpu)", "CPU");
-
-    *points = points_iter.collect();
+    let points: Vec<f32> = if history.is_empty() {
+        vec![data.global_cpu]
+    } else {
+        history.iter().map(|sample| sample.cpu).collect()
+    };
+    graph.add_series(points.into_iter(), "var(--chart-cpu)", "CPU");
 
     html! {
-        section .span-3
+        section .chart-card .span-3 data-panel="cpu-chart"
         {
             h2 { "CPU activity" }
-            p .chart-note { "Recent readings since this page was opened" }
+            p .chart-note { "Latest 20 samples, kept while the node is connected" }
             (graph)
         }
     }
 }
 
-pub fn temp_graph(data: &TempResponse, points: &mut QueryArray) -> Option<Markup> {
+pub fn temp_graph(data: &TempResponse, history: &[Sample]) -> Option<Markup> {
     data.temp.map(|temp| {
         let mut graph = SvgGraph::new(Axis::Temp);
 
-        let points_iter = std::iter::once(temp).chain(points.iter()).take(20);
-
-        graph.add_series(points_iter.clone(), "var(--chart-temp)", "Temperature");
-
-        *points = points_iter.collect();
+        let mut points: Vec<f32> = history.iter().map_while(|sample| sample.temp).collect();
+        if points.is_empty() {
+            points.push(temp);
+        }
+        graph.add_series(points.into_iter(), "var(--chart-temp)", "Temperature");
 
         html! {
-                section .span-3
+                section .chart-card .span-3 data-panel="temp-chart"
                 {
                     h2 { "Temperature history" }
-                    p .chart-note { "Recent readings since this page was opened" }
+                    p .chart-note { "Latest 20 samples, kept while the node is connected" }
                     (graph)
                 }
         }
@@ -100,7 +99,7 @@ pub fn mem_meters(data: &MemResponse) -> Markup {
     let swap_percent = calc_percent(data.swap.used, data.swap.total);
 
     html! {
-        section .metric-card .span-2 {
+        section .metric-card .span-2 data-panel="memory-meter" {
             h2 { "Memory" }
 
             p .metric-row { span { "RAM" } strong { (pretty_ram_used) " / " (pretty_ram_total) } }
@@ -116,33 +115,27 @@ pub fn mem_meters(data: &MemResponse) -> Markup {
     }
 }
 
-pub fn mem_graph(
-    data: &MemResponse,
-    ram_points: &mut QueryArray,
-    swap_points: &mut QueryArray,
-) -> Markup {
+pub fn mem_graph(data: &MemResponse, history: &[Sample]) -> Markup {
     let mut graph = SvgGraph::new(Axis::Percent);
 
     let ram_percent = calc_percent(data.ram.used, data.ram.total);
     let swap_percent = calc_percent(data.swap.used, data.swap.total);
 
-    let ram_points_iter = std::iter::once(ram_percent)
-        .chain(ram_points.iter())
-        .take(20);
-    let swap_points_iter = std::iter::once(swap_percent)
-        .chain(swap_points.iter())
-        .take(20);
-
-    graph.add_series(ram_points_iter.clone(), "var(--chart-ram)", "RAM");
-    graph.add_series(swap_points_iter.clone(), "var(--chart-swap)", "Swap");
-
-    *ram_points = ram_points_iter.collect();
-    *swap_points = swap_points_iter.collect();
+    let (ram_points, swap_points): (Vec<f32>, Vec<f32>) = if history.is_empty() {
+        (vec![ram_percent], vec![swap_percent])
+    } else {
+        history
+            .iter()
+            .map(|sample| (sample.ram, sample.swap))
+            .unzip()
+    };
+    graph.add_series(ram_points.into_iter(), "var(--chart-ram)", "RAM");
+    graph.add_series(swap_points.into_iter(), "var(--chart-swap)", "Swap");
 
     html! {
-        section .span-3 {
+        section .chart-card .span-3 data-panel="memory-chart" {
             h2 { "Memory activity" }
-            p .chart-note { "Recent readings since this page was opened" }
+            p .chart-note { "Latest 20 samples, kept while the node is connected" }
             (graph)
         }
     }
@@ -152,7 +145,7 @@ pub fn disk_meters(data: &DiskResponse) -> Markup {
     let span = calc_grid_span(data.disks.len());
 
     html! {
-        section .metric-card .{"span-" (span)} {
+        section .metric-card .{"span-" (span)} data-panel="disk-meter" {
             h2 { "Storage" }
 
             @for disk in &data.disks {
@@ -169,28 +162,22 @@ pub fn disk_meters(data: &DiskResponse) -> Markup {
     }
 }
 
-pub fn net_graph(
-    data: &NetworkResponse,
-    sent_points: &mut QueryArray,
-    recv_points: &mut QueryArray,
-) -> Markup {
+pub fn net_graph(data: &NetworkResponse, history: &[Sample]) -> Markup {
     let mut graph = SvgGraph::new(Axis::Bytes);
 
-    let sent_points_iter = std::iter::once(data.sent as f32)
-        .chain(sent_points.iter())
-        .take(20);
-    let recv_points_iter = std::iter::once(data.recv as f32)
-        .chain(recv_points.iter())
-        .take(20);
-
-    graph.add_series(sent_points_iter.clone(), "var(--chart-sent)", "Sent");
-    graph.add_series(recv_points_iter.clone(), "var(--chart-recv)", "Received");
-
-    *sent_points = sent_points_iter.collect();
-    *recv_points = recv_points_iter.collect();
+    let (sent_points, recv_points): (Vec<f32>, Vec<f32>) = if history.is_empty() {
+        (vec![data.sent as f32], vec![data.recv as f32])
+    } else {
+        history
+            .iter()
+            .map(|sample| (sample.sent, sample.recv))
+            .unzip()
+    };
+    graph.add_series(sent_points.into_iter(), "var(--chart-sent)", "Sent");
+    graph.add_series(recv_points.into_iter(), "var(--chart-recv)", "Received");
 
     html! {
-        section .span-3 {
+        section .chart-card .span-3 data-panel="network-chart" {
             h2 { "Network transfer" }
             p .chart-note { "Bytes since the backend last refreshed its network counters; intervals vary. The vertical scale is logarithmic, not a transfer rate." }
             (graph)
