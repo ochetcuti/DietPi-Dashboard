@@ -33,6 +33,12 @@ impl DashboardSocket {
             .await
             .map(|x| {
                 x.and_then(|mut data| {
+                    if data.len() < NONCE_LEN + CHACHA20_POLY1305.tag_len() {
+                        return Err(io::Error::new(
+                            io::ErrorKind::InvalidData,
+                            "encrypted frame is too short",
+                        ));
+                    }
                     let nonce = data.split_off(data.len() - NONCE_LEN);
                     let nonce = Nonce::assume_unique_for_key((*nonce).try_into().unwrap());
 

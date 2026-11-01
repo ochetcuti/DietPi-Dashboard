@@ -1,4 +1,4 @@
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use data_encoding::BASE64;
 use hyper::StatusCode;
@@ -20,6 +20,21 @@ use crate::{
 
 use super::template::{send_req, template};
 
+fn valid_entry_name(name: &str) -> bool {
+    let mut components = Path::new(name).components();
+    matches!(components.next(), Some(Component::Normal(_))) && components.next().is_none()
+}
+
+fn check_entry_name(name: &str) -> Result<(), ServerResponse> {
+    if valid_entry_name(name) {
+        Ok(())
+    } else {
+        Err(ServerResponse::new()
+            .status(StatusCode::BAD_REQUEST)
+            .body("Invalid file or folder name"))
+    }
+}
+
 fn default_path() -> String {
     "/root".into()
 }
@@ -31,7 +46,7 @@ pub struct BrowserQuery {
 }
 
 pub async fn page(req: ServerRequest) -> Result<ServerResponse, ServerResponse> {
-    req.check_login()?;
+    req.require_authentication()?;
 
     let query: BrowserQuery = req.extract_query()?;
 
@@ -61,7 +76,7 @@ pub async fn page(req: ServerRequest) -> Result<ServerResponse, ServerResponse> 
                     @let dblclick = match item.kind {
                         FileKind::TextFile => "$get('/browser/file');",
                         FileKind::Directory => "$get('/browser');",
-                        FileKind::BinaryFile => "window.open(`/browser/actions/download?path=${this.dataset.path}`)",
+                        FileKind::BinaryFile => "window.open(`/browser/actions/download?path=${encodeURIComponent(this.dataset.path)}`)",
                         FileKind::Special => "",
                     };
                     tr
@@ -98,7 +113,7 @@ pub async fn page(req: ServerRequest) -> Result<ServerResponse, ServerResponse> 
 }
 
 pub async fn file(req: ServerRequest) -> Result<ServerResponse, ServerResponse> {
-    req.check_login()?;
+    req.require_authentication()?;
 
     let query: BrowserQuery = req.extract_query()?;
 
@@ -161,7 +176,7 @@ pub struct BrowserActionsQuery {
 }
 
 pub async fn actions(req: ServerRequest) -> Result<ServerResponse, ServerResponse> {
-    req.check_login()?;
+    req.require_authentication()?;
 
     let query: BrowserActionsQuery = req.extract_query()?;
 
@@ -169,11 +184,11 @@ pub async fn actions(req: ServerRequest) -> Result<ServerResponse, ServerRespons
         div #actions-list data-path=(query.current_path) {
             (default_actions())
             @if matches!(query.kind, FileKind::TextFile | FileKind::BinaryFile | FileKind::Directory) {
-                button title="Rename" nm-bind={"
+                button title="Rename" data-selected-path=(&query.path) nm-bind={"
                     onclick: () => {
                         let new_name = prompt('Enter a new name:');
                         if (new_name) $post('/browser/actions/rename', {
-                            path: '"(query.path)"',
+                            path: this.dataset.selectedPath,
                             new_name
                         });
                     }
@@ -182,23 +197,23 @@ pub async fn actions(req: ServerRequest) -> Result<ServerResponse, ServerRespons
                 }
             }
             @if matches!(query.kind, FileKind::TextFile | FileKind::BinaryFile)  {
-                button title="Delete" nm-bind={"
+                button title="Delete" data-selected-path=(&query.path) nm-bind={"
                     onclick: () => { 
                         if (confirm('Are you sure you want to delete this file?'))
-                            $post('/browser/actions/delete-file', {path: '"(query.path)"'});
+                            $post('/browser/actions/delete-file', {path: this.dataset.selectedPath});
                     }
                 "} { (Icon::new("fa6-solid-trash")) }
-                button title="Download" nm-bind={"
+                button title="Download" data-selected-path=(&query.path) nm-bind={"
                     onclick: () => { 
-                        window.open('/browser/actions/download?path="(query.path)"')
+                        window.open('/browser/actions/download?path=' + encodeURIComponent(this.dataset.selectedPath))
                     }
                 "} { (Icon::new("fa6-solid-file-arrow-down")) }
             }
             @if matches!(query.kind, FileKind::Directory)  {
-                button title="Delete" nm-bind={"
+                button title="Delete" data-selected-path=(&query.path) nm-bind={"
                     onclick: () => { 
                         if (confirm('Are you sure you want to delete this folder?'))
-                            $post('/browser/actions/delete-folder', {path: '"(query.path)"'});
+                            $post('/browser/actions/delete-folder', {path: this.dataset.selectedPath});
                     }
                 "} { (Icon::new("fa6-solid-trash")) }
             }
@@ -266,9 +281,10 @@ pub struct NewQuery {
 }
 
 pub async fn new_file(mut req: ServerRequest) -> Result<ServerResponse, ServerResponse> {
-    req.check_login()?;
+    req.require_authentication()?;
 
     let query: NewQuery = req.extract_form().await?;
+    check_entry_name(&query.name)?;
 
     let mut path = PathBuf::from(&query.path);
     path.push(query.name);
@@ -283,9 +299,10 @@ pub async fn new_file(mut req: ServerRequest) -> Result<ServerResponse, ServerRe
 }
 
 pub async fn new_folder(mut req: ServerRequest) -> Result<ServerResponse, ServerResponse> {
-    req.check_login()?;
+    req.require_authentication()?;
 
     let query: NewQuery = req.extract_form().await?;
+    check_entry_name(&query.name)?;
 
     // Path is guaranteed to be a valid string, because it was built from two strings
     let path = Path::new(&query.path).join(Path::new(&query.name));
@@ -306,9 +323,10 @@ pub struct RenameQuery {
 }
 
 pub async fn rename(mut req: ServerRequest) -> Result<ServerResponse, ServerResponse> {
-    req.check_login()?;
+    req.require_authentication()?;
 
     let query: RenameQuery = req.extract_form().await?;
+    check_entry_name(&query.new_name)?;
 
     let parent = Path::new(&query.path).parent().ok_or(
         ServerResponse::new()
@@ -336,7 +354,7 @@ pub struct FileQuery {
 }
 
 pub async fn delete_file(mut req: ServerRequest) -> Result<ServerResponse, ServerResponse> {
-    req.check_login()?;
+    req.require_authentication()?;
 
     let query: FileQuery = req.extract_form().await?;
 
@@ -353,7 +371,7 @@ pub async fn delete_file(mut req: ServerRequest) -> Result<ServerResponse, Serve
 }
 
 pub async fn delete_folder(mut req: ServerRequest) -> Result<ServerResponse, ServerResponse> {
-    req.check_login()?;
+    req.require_authentication()?;
 
     let query: FileQuery = req.extract_form().await?;
 
@@ -370,7 +388,7 @@ pub async fn delete_folder(mut req: ServerRequest) -> Result<ServerResponse, Ser
 }
 
 pub async fn download(req: ServerRequest) -> Result<ServerResponse, ServerResponse> {
-    req.check_login()?;
+    req.require_authentication()?;
 
     let query: FileQuery = req.extract_query()?;
 
@@ -386,7 +404,7 @@ pub struct SaveForm {
 }
 
 pub async fn save(mut req: ServerRequest) -> Result<ServerResponse, ServerResponse> {
-    req.check_login()?;
+    req.require_authentication()?;
 
     let query: SaveForm = req.extract_form().await?;
 
@@ -407,9 +425,10 @@ pub struct UploadForm {
 }
 
 pub async fn upload(mut req: ServerRequest) -> Result<ServerResponse, ServerResponse> {
-    req.check_login()?;
+    req.require_authentication()?;
 
     let query: UploadForm = req.extract_form().await?;
+    check_entry_name(&query.name)?;
 
     let mut path = PathBuf::from(&query.path);
     path.push(query.name);
@@ -431,4 +450,18 @@ pub async fn upload(mut req: ServerRequest) -> Result<ServerResponse, ServerResp
         RedirectType::SeeOther,
         &format!("/browser?path={}", query.path),
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::valid_entry_name;
+
+    #[test]
+    fn entry_names_cannot_escape_the_directory() {
+        for invalid in ["", ".", "..", "/tmp/file", "../file", "a/b"] {
+            assert!(!valid_entry_name(invalid), "accepted {invalid:?}");
+        }
+        assert!(valid_entry_name("file name.txt"));
+        assert!(valid_entry_name(".hidden"));
+    }
 }

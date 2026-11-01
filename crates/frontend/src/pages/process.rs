@@ -70,10 +70,19 @@ pub async fn page(req: ServerRequest) -> Result<ServerResponse, ServerResponse> 
     let sort_str = serde_plain::to_string(&query.sort).unwrap();
 
     let content = html! {
+        div .process-toolbar {
+            label for="process-search" { "Filter processes" }
+            input #process-search type="search" placeholder="Search by name or PID" autocomplete="off" oninput="filterProcessRows()";
+            label .pause-control {
+                input #process-pause type="checkbox" onchange="if (!this.checked) location.reload()";
+                "Pause refresh"
+            }
+        }
+        p .helper-text { "CPU is shown per process and can exceed 100% on multicore systems. Signal requests are sent to the node; delivery is not currently acknowledged." }
         section
             #process-swap
             data-reverse=(query.reverse) data-sort=(sort_str)
-            nm-bind="oninit: () => $debounce(() => $get('/process'), 2000)"
+            nm-bind="oninit: () => { filterProcessRows(); if (!document.getElementById('process-pause')?.checked) $debounce(() => { if (!document.getElementById('process-pause')?.checked) $get('/process') }, 2000); }"
         {
             h2 { "Processes" }
 
@@ -89,7 +98,7 @@ pub async fn page(req: ServerRequest) -> Result<ServerResponse, ServerResponse> 
                 @for proc in processes {
                     @let pretty_mem = pretty_bytes_binary(proc.mem, Some(0));
 
-                    tr {
+                    tr data-process-row data-search=(format!("{} {}", proc.pid, proc.name.to_lowercase())) {
                         td { (proc.pid) }
                         td { (proc.name) }
                         td { (format!("{:?}", proc.status)) }
@@ -97,18 +106,18 @@ pub async fn page(req: ServerRequest) -> Result<ServerResponse, ServerResponse> 
                         td { (pretty_mem) }
                         td nm-data data-pid=(proc.pid) {
                             .actions-cell {
-                                button data-signal="kill" nm-bind="onclick: () => $post('/process/signal')" {
+                                button data-signal="kill" title="Force kill process" aria-label="Force kill process" nm-bind="onclick: () => { if (confirm('Force kill this process? Unsaved work may be lost.')) $post('/process/signal') }" {
                                     (Icon::new("fa6-solid-skull"))
                                 }
-                                button data-signal="term" nm-bind="onclick: () => $post('/process/signal')" {
+                                button data-signal="term" title="Terminate process" aria-label="Terminate process" nm-bind="onclick: () => { if (confirm('Terminate this process?')) $post('/process/signal') }" {
                                     (Icon::new("fa6-solid-ban"))
                                 }
                                 @if proc.status == ProcessStatus::Paused {
-                                    button data-signal="resume" nm-bind="onclick: () => $post('/process/signal')" {
+                                    button data-signal="resume" title="Resume process" aria-label="Resume process" nm-bind="onclick: () => $post('/process/signal')" {
                                         (Icon::new("fa6-solid-play"))
                                     }
                                 } @else {
-                                    button data-signal="pause" nm-bind="onclick: () => $post('/process/signal')" {
+                                    button data-signal="pause" title="Pause process" aria-label="Pause process" nm-bind="onclick: () => $post('/process/signal')" {
                                         (Icon::new("fa6-solid-pause"))
                                     }
                                 }

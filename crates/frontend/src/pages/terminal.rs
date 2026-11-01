@@ -10,11 +10,13 @@ use crate::http::{request::ServerRequest, response::ServerResponse};
 use super::template::template;
 
 pub async fn page(req: ServerRequest) -> Result<ServerResponse, ServerResponse> {
-    req.check_login()?;
+    req.require_authentication()?;
 
     let content = html! {
         section {
             h2 { "Terminal" }
+            p .terminal-notice { "This node currently uses a shared terminal session. Other authenticated users can see and send input to it." }
+            p .terminal-status role="status" aria-live="polite" { "Connecting to terminal..." }
             web-terminal {}
         }
     };
@@ -23,10 +25,14 @@ pub async fn page(req: ServerRequest) -> Result<ServerResponse, ServerResponse> 
 }
 
 pub async fn stream(req: ServerRequest) -> Result<ServerResponse, ServerResponse> {
-    req.check_login()?;
+    req.require_authentication()?;
 
     let backend = req.extract_backends()?.current_backend.handle;
-    let term_rx = backend.get_terminal_handle().await.unwrap();
+    let term_rx = backend.get_terminal_handle().await.map_err(|_| {
+        ServerResponse::new()
+            .status(StatusCode::BAD_GATEWAY)
+            .body("Terminal backend is unavailable")
+    })?;
 
     let term_stream = UnboundedReceiverStream::new(term_rx);
 
@@ -37,7 +43,7 @@ pub async fn stream(req: ServerRequest) -> Result<ServerResponse, ServerResponse
 
 // Someday we'll be able to stream it in? Right now this is a handwritten version of http_body_util::Collected.
 pub async fn write(mut req: ServerRequest) -> Result<ServerResponse, ServerResponse> {
-    req.check_login()?;
+    req.require_authentication()?;
     let backend = req.extract_backends()?.current_backend.handle;
 
     let body = req.extract_body().await?;
@@ -56,7 +62,7 @@ pub async fn write(mut req: ServerRequest) -> Result<ServerResponse, ServerRespo
 }
 
 pub async fn resize(mut req: ServerRequest) -> Result<ServerResponse, ServerResponse> {
-    req.check_login()?;
+    req.require_authentication()?;
     let backend = req.extract_backends()?.current_backend.handle;
 
     let size: TerminalDimensions = req.extract_form().await?;

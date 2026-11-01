@@ -176,15 +176,16 @@ pub fn template(
                     link rel="icon" href="/favicon.svg" type="image/svg+xml";
                     link rel="stylesheet" href="/static/main.css";
                 }
-                body
+                body class=[if current == "login" { Some("login-page") } else { None }]
                     nm-data="navOpen: window.innerWidth > 700, msgsOpen: false, newMsg: false,"
                     nm-bind="'class.nav-closed': () => !navOpen, 'class.msgs-open': () => msgsOpen"
                 {
                     h1 { span .brand-mark { "D" } span .brand-name { "DietPi" small { "DASHBOARD" } } }
 
-                    (header(req)?)
-
-                    (nav(current))
+                    @if current != "login" {
+                        (header(req)?)
+                        (nav(current))
+                    }
 
                     main nm-data=(persistent_data) {
                         div .page-heading {
@@ -194,6 +195,7 @@ pub fn template(
                     }
 
                     (footer())
+                    div #request-error role="alert" hidden {}
 
                     script src="/static/main.js" {}
                 }

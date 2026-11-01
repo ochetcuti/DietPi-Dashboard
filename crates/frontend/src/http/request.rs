@@ -207,6 +207,15 @@ impl ServerRequest {
         Ok(())
     }
 
+    pub fn require_authentication(&self) -> Result<(), ServerResponse> {
+        if !self.config().enable_login {
+            return Err(ServerResponse::new()
+                .status(StatusCode::FORBIDDEN)
+                .body("Enable dashboard authentication before using administrative features."));
+        }
+        self.check_login()
+    }
+
     pub fn delete_login(&self) {
         if self.config().enable_login
             && let Some(token) = self.cookies.get("token")

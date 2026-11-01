@@ -63,6 +63,7 @@ pub fn cpu_graph(data: &CpuResponse, points: &mut QueryArray) -> Markup {
         section .span-3
         {
             h2 { "CPU activity" }
+            p .chart-note { "Recent readings since this page was opened" }
             (graph)
         }
     }
@@ -82,6 +83,7 @@ pub fn temp_graph(data: &TempResponse, points: &mut QueryArray) -> Option<Markup
                 section .span-3
                 {
                     h2 { "Temperature history" }
+                    p .chart-note { "Recent readings since this page was opened" }
                     (graph)
                 }
         }
@@ -140,6 +142,7 @@ pub fn mem_graph(
     html! {
         section .span-3 {
             h2 { "Memory activity" }
+            p .chart-note { "Recent readings since this page was opened" }
             (graph)
         }
     }
@@ -188,7 +191,8 @@ pub fn net_graph(
 
     html! {
         section .span-3 {
-            h2 { "Network activity" }
+            h2 { "Network transfer" }
+            p .chart-note { "Bytes since the backend last refreshed its network counters; intervals vary. The vertical scale is logarithmic, not a transfer rate." }
             (graph)
         }
     }

@@ -25,6 +25,45 @@ macro_rules! router {
 }
 
 pub async fn router(req: ServerRequest) -> Result<BuiltResponse, std::convert::Infallible> {
+    if req.method == Method::POST {
+        let cross_site = req
+            .headers
+            .get("sec-fetch-site")
+            .and_then(|value| value.to_str().ok())
+            == Some("cross-site");
+        let origin_mismatch = req
+            .headers
+            .get(header::ORIGIN)
+            .and_then(|value| value.to_str().ok())
+            .map(|origin| {
+                let origin_authority = origin
+                    .parse::<hyper::Uri>()
+                    .ok()
+                    .and_then(|uri| uri.authority().cloned());
+                let host = req
+                    .headers
+                    .get(header::HOST)
+                    .and_then(|value| value.to_str().ok());
+                origin_authority
+                    .as_ref()
+                    .map(|authority| authority.as_str())
+                    != host
+            })
+            .unwrap_or(false);
+        if cross_site || origin_mismatch {
+            return Ok(ServerResponse::new()
+                .status(StatusCode::FORBIDDEN)
+                .body("Cross-site request rejected")
+                .build());
+        }
+    }
+    if req.method == Method::POST
+        && req.uri.path() != "/login"
+        && req.uri.path() != "/logout"
+        && let Err(response) = req.require_authentication()
+    {
+        return Ok(response.build());
+    }
     let path_segments: Vec<_> = req.path_segments().collect();
 
     let resp = router!(req, &*path_segments, {

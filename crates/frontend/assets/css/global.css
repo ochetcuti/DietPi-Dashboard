@@ -85,3 +85,10 @@ web-terminal { display: block; height: calc(100vh - 18rem); min-height: 20rem; }
     footer { flex-wrap: wrap; }
     button { min-height: 44px; }
 }
+
+body.login-page, body.login-page.nav-closed { display: flex; flex-direction: column; }
+.login-page h1 { justify-content: center; }
+.login-page main { width: min(100%, 34rem); margin: auto; }
+.login-page footer { width: 100%; }
+
+#request-error { position: fixed; z-index: 10; right: 1rem; bottom: 1rem; max-width: min(28rem, calc(100vw - 2rem)); padding: .85rem 1rem; background: light-dark(#fff1f2, #58232b); color: light-dark(#821d2c, #fff1f2); border: 1px solid light-dark(#d8979f, #a65865); border-radius: 8px; box-shadow: 0 4px 16px #0003; }

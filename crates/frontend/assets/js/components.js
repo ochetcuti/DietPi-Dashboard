@@ -1,3 +1,31 @@
+document.addEventListener("fetcherr", event => {
+    if (event.detail?.err?.name === "AbortError") return;
+    const message = document.getElementById("request-error");
+    if (!message) return;
+    message.textContent = "Request failed. Check the node connection and try again.";
+    message.hidden = false;
+    clearTimeout(message.hideTimer);
+    message.hideTimer = setTimeout(() => { message.hidden = true; }, 8000);
+});
+
+function filterSoftwareRows() {
+    const input = document.getElementById("software-search");
+    if (!input) return;
+    const query = input.value.trim().toLowerCase();
+    document.querySelectorAll("[data-software-row]").forEach(row => {
+        row.hidden = !row.dataset.search.includes(query);
+    });
+}
+
+function filterProcessRows() {
+    const input = document.getElementById("process-search");
+    if (!input) return;
+    const query = input.value.trim().toLowerCase();
+    document.querySelectorAll("[data-process-row]").forEach(row => {
+        row.hidden = !row.dataset.search.includes(query);
+    });
+}
+
 async function getUpdateMessage(oldVersion) {
     const now = Math.round(Date.now() / 1000);
     let { newVersion = null, lastChecked = 0 } = JSON.parse(
@@ -27,40 +55,62 @@ async function getUpdateMessage(oldVersion) {
     customElements.define(
         "web-terminal",
         class extends HTMLElement {
-            async connectedCallback() {
-                const term = new Terminal();
-
-                const fitAddon = new FitAddon.FitAddon();
-                term.loadAddon(fitAddon);
-
+            connectedCallback() {
+                const term = this.term = new Terminal({ cursorBlink: true, scrollback: 5000 });
+                const fit = new FitAddon.FitAddon();
+                const controller = this.controller = new AbortController();
+                const status = this.parentElement.querySelector(".terminal-status");
+                let inputQueue = Promise.resolve();
+                let resizeTimer;
+                const showStatus = (message, state) => {
+                    if (status) { status.textContent = message; status.dataset.state = state; }
+                };
+                const send = (url, body) => fetch(url, {
+                    method: "POST", body, signal: controller.signal,
+                    credentials: "same-origin"
+                }).then(response => {
+                    if (!response.ok || response.redirected) throw new Error("Request failed");
+                });
+                term.loadAddon(fit);
                 term.open(this);
-
-                fetch("/terminal/stream").then(async (res) => {
-                    for await (const chunk of res.body) {
-                        term.write(chunk)
-                    }
+                term.onData(data => {
+                    inputQueue = inputQueue.then(() => send("/terminal/write", data)).catch(error => {
+                        if (error.name !== "AbortError") showStatus("Input could not be sent. Reload to reconnect.", "error");
+                    });
                 });
-
-                term.onResize((dimensions) => {
-                    fetch("/terminal/resize", { method: "POST", body: new URLSearchParams(dimensions) });
+                term.onResize(({ rows, cols }) => {
+                    clearTimeout(resizeTimer);
+                    resizeTimer = setTimeout(() => send("/terminal/resize", new URLSearchParams({ rows, cols })).catch(error => {
+                        if (error.name !== "AbortError") showStatus("Terminal resize failed.", "error");
+                    }), 100);
                 });
+                this.onWindowResize = () => fit.fit();
+                window.addEventListener("resize", this.onWindowResize);
+                fit.fit();
+                fetch("/terminal/stream", { signal: controller.signal, credentials: "same-origin" })
+                    .then(async response => {
+                        if (!response.ok || response.redirected || !response.body ||
+                            !response.headers.get("content-type")?.startsWith("application/octet-stream")) {
+                            throw new Error("Terminal stream unavailable");
+                        }
+                        showStatus("Connected. This session is shared with other dashboard users.", "connected");
+                        const reader = response.body.getReader();
+                        while (true) {
+                            const { value, done } = await reader.read();
+                            if (done) break;
+                            term.write(value);
+                        }
+                        showStatus("Terminal disconnected. Reload to reconnect.", "error");
+                    })
+                    .catch(error => {
+                        if (error.name !== "AbortError") showStatus("Terminal disconnected. Reload to reconnect.", "error");
+                    });
+            }
 
-                fitAddon.fit()
-                window.addEventListener("resize", () => fitAddon.fit(), 50);
-
-                let sendTimeout = null;
-                let sendBuf = "";
-
-                // I would MUCH rather stream this, but that's not possible on HTTP/1.1 and doesn't work at all on Firefox
-                term.onData((data) => {
-                    clearTimeout(sendTimeout);
-                    sendBuf += data;
-                    // Short debounce to prevent excess requests
-                    sendTimeout = setTimeout(() => {
-                        fetch("/terminal/write", { method: "POST", body: sendBuf });
-                        sendBuf = "";
-                    }, 60);
-                });
+            disconnectedCallback() {
+                this.controller?.abort();
+                window.removeEventListener("resize", this.onWindowResize);
+                this.term?.dispose();
             }
         }
     );

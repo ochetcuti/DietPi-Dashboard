@@ -16,7 +16,7 @@ fn software_table(list: &[SoftwareInfo], idx: u8, pretty_action: &str, action: &
     html! {
         div nm-bind={"hidden: () => activeIdx !== " (idx)} {
             div nm-data="software: new Map()" {
-                table {
+                table .software-table {
                     tr {
                         th { "Name" }
                         th { "Description" }
@@ -25,7 +25,7 @@ fn software_table(list: &[SoftwareInfo], idx: u8, pretty_action: &str, action: &
                         th { (pretty_action) }
                     }
                     @for item in list {
-                        tr {
+                        tr data-software-row data-search=(format!("{} {}", item.name.to_lowercase(), item.desc.to_lowercase())) {
                             td { (item.name) }
                             td { (item.desc) }
                             td { (item.deps) }
@@ -37,9 +37,9 @@ fn software_table(list: &[SoftwareInfo], idx: u8, pretty_action: &str, action: &
                                 }
                             }
                             td {
-                                input type="checkbox" nm-bind={
+                                input type="checkbox" data-name=(&item.name) aria-label={"Select " (item.name)} nm-bind={
                                     "onchange: () => {
-                                        this.checked ? software.set("(item.id)", '"(item.name)"') : software.delete("(item.id)");
+                                        this.checked ? software.set("(item.id)", this.dataset.name) : software.delete("(item.id)");
                                         software = software;
                                     }"
                                 };
@@ -51,7 +51,7 @@ fn software_table(list: &[SoftwareInfo], idx: u8, pretty_action: &str, action: &
                 button .software-input
                     data-action=(action)
                     nm-bind="
-                        onclick: () => $post('/software', { software: [...software.keys()] }),
+                        onclick: () => { if (software.size && confirm('Apply this software operation to the selected items?')) $post('/software', { software: [...software.keys()] }) },
                         disabled: () => _nmFetching
                     "
                 {
@@ -67,17 +67,23 @@ fn software_table(list: &[SoftwareInfo], idx: u8, pretty_action: &str, action: &
 fn card(data: &SoftwareResponse) -> Markup {
     html! {
         section #software-card {
-            h2 { "Software" }
+            h2 { "DietPi-Software" }
+            p .helper-text { "This list comes from DietPi-Software. It does not include all system packages or report available updates or service status." }
+            @if data.installed.is_empty() && data.uninstalled.is_empty() {
+                p .inventory-warning role="status" { "No DietPi-Software inventory was returned. The tool may be unavailable or could not read its state." }
+            }
+            label for="software-search" { "Filter software" }
+            input #software-search type="search" placeholder="Search by name or description" oninput="filterSoftwareRows()";
             .tab-container role="tablist" nm-data="activeIdx: 0" {
                 .tabs {
                     button nm-bind="
                         onclick: () => activeIdx = 0,
                         ariaSelected: () => activeIdx === 0
-                    " { "Install Software" }
+                    " { "Available" }
                     button nm-bind="
                         onclick: () => activeIdx = 1,
                         ariaSelected: () => activeIdx === 1
-                    " { "Uninstall Software" }
+                    " { "Installed" }
                 }
                 (software_table(&data.uninstalled, 0, "Install", "install"))
                 (software_table(&data.installed, 1, "Uninstall", "uninstall"))
@@ -143,7 +149,7 @@ pub async fn form(mut req: ServerRequest) -> Result<ServerResponse, ServerRespon
         (card(&data))
         br;
         section #output nm-bind="oninit: () => this.scrollIntoView()" {
-            h2 { "Install Summary" }
+            h2 { "Operation output" }
             pre {
                 (output)
             }

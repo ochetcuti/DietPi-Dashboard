@@ -48,7 +48,13 @@ impl Axis {
         match self {
             Self::Percent => data,
             Self::Temp => data - 20.,
-            Self::Bytes => 10. * data.log10(),
+            Self::Bytes => {
+                if data > 0. {
+                    10. * data.log10()
+                } else {
+                    0.
+                }
+            }
         }
     }
 }

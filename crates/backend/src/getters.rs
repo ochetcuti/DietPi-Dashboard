@@ -125,7 +125,6 @@ pub fn processes(mut ctx: BackendContext) -> ProcessResponse {
     let processes = sys
         .processes()
         .iter()
-        .filter(|(_, proc)| !proc.cmd().is_empty())
         .map(|(pid, proc)| ProcessInfo {
             pid: pid.as_u32(),
             name: proc.name().to_string_lossy().into(),
@@ -207,7 +206,11 @@ fn parse_software_line(line: &str) -> Option<(SoftwareInfo, bool)> {
 
     let installed = fields.next()?;
     let installed: u8 = installed.parse().ok()?;
-    let installed = installed > 0;
+    let installed = match installed {
+        0 => false,
+        2 => true,
+        _ => return None,
+    };
 
     let name = fields.next()?.into();
 
@@ -276,13 +279,33 @@ fn remove_escape_codes(s: impl Iterator<Item = u8>) -> Vec<u8> {
 }
 
 pub fn command(_ctx: BackendContext, action: CommandAction) -> CommandResponse {
-    let output = Command::new(action.cmd)
-        .args(&action.args)
-        .output()
-        .map(|out| out.stdout.into_iter())
-        .map(remove_escape_codes)
-        .unwrap_or_else(|err| format!("command execution failed: {err}").into());
-
+    let valid = action.cmd == "/boot/dietpi/dietpi-software"
+        && matches!(
+            action.args.first().map(String::as_str),
+            Some("install" | "uninstall")
+        )
+        && action.args.len() > 1
+        && action.args[1..].iter().all(|id| id.parse::<u16>().is_ok());
+    if !valid {
+        return CommandResponse {
+            output: b"Unsupported software operation.".to_vec(),
+        };
+    }
+    let output = match Command::new(action.cmd).args(&action.args).output() {
+        Ok(result) => {
+            let mut text = remove_escape_codes(result.stdout.into_iter());
+            let stderr = remove_escape_codes(result.stderr.into_iter());
+            if !stderr.is_empty() {
+                text.extend_from_slice(b"\n");
+                text.extend(stderr);
+            }
+            if !result.status.success() {
+                text.extend_from_slice(format!("\nOperation failed: {}", result.status).as_bytes());
+            }
+            text
+        }
+        Err(err) => format!("Operation failed to start: {err}").into_bytes(),
+    };
     CommandResponse { output }
 }
 
@@ -398,4 +421,25 @@ pub fn read_config_helper() -> Option<String> {
 
 pub fn read_config(_ctx: BackendContext) -> String {
     read_config_helper().unwrap_or_default()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_software_line;
+
+    #[test]
+    fn software_states_do_not_treat_queued_as_installed() {
+        assert!(
+            !parse_software_line("1|0|Name|Description|Deps|Docs")
+                .unwrap()
+                .1
+        );
+        assert!(
+            parse_software_line("1|2|Name|Description|Deps|Docs")
+                .unwrap()
+                .1
+        );
+        assert!(parse_software_line("1|1|Name|Description|Deps|Docs").is_none());
+        assert!(parse_software_line("1|3|Name|Description|Deps|Docs").is_none());
+    }
 }

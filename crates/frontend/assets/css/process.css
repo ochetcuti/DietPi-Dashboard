@@ -18,3 +18,11 @@
         width: 100%;
     }
 }
+
+.process-toolbar { display: flex; align-items: center; flex-wrap: wrap; gap: .7rem; margin-bottom: .6rem; }
+.process-toolbar input[type="search"] { width: min(100%, 22rem); }
+.pause-control { display: inline-flex; align-items: center; gap: .45rem; }
+.helper-text, .chart-note, .terminal-notice, .terminal-status { color: var(--muted); font-size: .83rem; }
+.helper-text { margin: 0 0 1rem; }
+.terminal-status[data-state="error"] { color: light-dark(#a12635, #ffb5bd); }
+.terminal-status[data-state="connected"] { color: light-dark(#245c47, #9bd7b9); }

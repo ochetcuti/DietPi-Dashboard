@@ -56,7 +56,14 @@ pub async fn form(mut req: ServerRequest) -> Result<ServerResponse, ServerRespon
             .redirect(RedirectType::SeeOther, "/")
             .header(
                 header::SET_COOKIE,
-                format!("token={token}; Max-Age=3600; Path=/; HttpOnly"),
+                format!(
+                    "token={token}; Max-Age=3600; Path=/; HttpOnly; SameSite=Strict{}",
+                    if req.config().enable_tls {
+                        "; Secure"
+                    } else {
+                        ""
+                    }
+                ),
             ))
     } else {
         Err(ServerResponse::new().redirect(RedirectType::SeeOther, "/login"))
@@ -72,5 +79,8 @@ pub async fn logout(req: ServerRequest) -> Result<ServerResponse, ServerResponse
 
     Ok(ServerResponse::new()
         .redirect(RedirectType::SeeOther, "/login")
-        .header(header::SET_COOKIE, "token=; Max-Age=0; Path=/; HttpOnly"))
+        .header(
+            header::SET_COOKIE,
+            "token=; Max-Age=0; Path=/; HttpOnly; SameSite=Strict",
+        ))
 }
