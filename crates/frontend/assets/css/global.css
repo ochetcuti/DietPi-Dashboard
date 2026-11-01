@@ -92,3 +92,5 @@ body.login-page, body.login-page.nav-closed { display: flex; flex-direction: col
 .login-page footer { width: 100%; }
 
 #request-error { position: fixed; z-index: 10; right: 1rem; bottom: 1rem; max-width: min(28rem, calc(100vw - 2rem)); padding: .85rem 1rem; background: light-dark(#fff1f2, #58232b); color: light-dark(#821d2c, #fff1f2); border: 1px solid light-dark(#d8979f, #a65865); border-radius: 8px; box-shadow: 0 4px 16px #0003; }
+
+.login-error { padding: .75rem; color: light-dark(#821d2c, #fff1f2); background: light-dark(#fff1f2, #58232b); border: 1px solid light-dark(#d8979f, #a65865); border-radius: 8px; }

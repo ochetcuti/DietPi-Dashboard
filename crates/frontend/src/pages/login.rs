@@ -15,9 +15,18 @@ pub async fn page(req: ServerRequest) -> Result<ServerResponse, ServerResponse> 
         return Err(ServerResponse::new().redirect(RedirectType::SeeOther, "/"));
     }
 
+    let login_failed = req
+        .uri
+        .query()
+        .is_some_and(|query| query.split('&').any(|part| part == "error=invalid"));
+
     let content = html! {
         section .login {
             h2 { "Sign in" }
+
+            @if login_failed {
+                p .login-error role="alert" { "Incorrect password. Please try again." }
+            }
 
             form method="POST" {
                 label for="password" { "Password" }
@@ -66,7 +75,7 @@ pub async fn form(mut req: ServerRequest) -> Result<ServerResponse, ServerRespon
                 ),
             ))
     } else {
-        Err(ServerResponse::new().redirect(RedirectType::SeeOther, "/login"))
+        Err(ServerResponse::new().redirect(RedirectType::SeeOther, "/login?error=invalid"))
     }
 }
 
